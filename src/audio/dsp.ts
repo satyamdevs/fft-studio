@@ -78,6 +78,36 @@ export function smoothBands(
   return result;
 }
 
+/** Map dB value to 0..1 visual range. Native range is roughly -100..-30. */
+export function dbToNorm(db: number, min = -100, max = -30): number {
+  if (db <= min) return 0;
+  if (db >= max) return 1;
+  return (db - min) / (max - min);
+}
+
+/** Average float dB spectrum into 0-255 log bands (same scale as byte path). */
+export function floatBandsToNorm(
+  floatFreq: Float32Array | number[],
+  mapping: BandMapping[],
+  out?: Float32Array,
+  minDb = -100,
+  maxDb = -30,
+): Float32Array {
+  const result = out ?? new Float32Array(mapping.length);
+  for (let i = 0; i < mapping.length; i++) {
+    const { loBin, hiBin } = mapping[i];
+    let sum = 0;
+    let n = 0;
+    for (let b = loBin; b <= hiBin && b < floatFreq.length; b++) {
+      sum += floatFreq[b] ?? minDb;
+      n++;
+    }
+    const avgDb = n > 0 ? sum / n : minDb;
+    result[i] = dbToNorm(avgDb, minDb, maxDb) * 255;
+  }
+  return result;
+}
+
 export interface Levels {
   bass: number;
   mid: number;
