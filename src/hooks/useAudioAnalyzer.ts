@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AudioEngine } from '../audio/AudioEngine';
-import { buildLogBands, computeLevels, computeLogBands, smoothBands, updateBeat } from '../audio/dsp';
+import { buildLogBands, computeLevels, computeLogBands, floatBandsToNorm, smoothBands, updateBeat } from '../audio/dsp';
+
+export type AnalyzerMode = 'byte' | 'db';
 
 export interface AnalyzerStats {
   bass: number;
@@ -16,6 +18,7 @@ export function useAudioAnalyzer(
   engine: AudioEngine | null,
   running: boolean,
   beatThreshold = 12,
+  mode: AnalyzerMode = 'byte',
 ) {
   const bandsRef = useRef<Float32Array>(new Float32Array(NUM_BANDS));
   const waveRef = useRef<Uint8Array>(new Uint8Array(2048));
@@ -38,6 +41,7 @@ export function useAudioAnalyzer(
     let prevBass = 0;
     let beat = 0;
     const rawFreq = new Uint8Array(analyser.frequencyBinCount);
+    const rawFloat = new Float32Array(analyser.frequencyBinCount);
     const timeData = new Uint8Array(analyser.fftSize);
     let mapping = buildLogBands(engine.sampleRate, analyser.fftSize, NUM_BANDS);
     let lastFftSize = analyser.fftSize;
@@ -59,7 +63,15 @@ export function useAudioAnalyzer(
       analyser.getByteFrequencyData(rawFreq as Uint8Array<ArrayBuffer>);
       analyser.getByteTimeDomainData(timeData as Uint8Array<ArrayBuffer>);
 
-      computeLogBands(rawFreq, mapping, computed);
+      if (mode === 'db') {
+        engine.getFloatFreq(rawFloat);
+        floatBandsToNorm(rawFloat, mapping, computed);
+        // Levels still need byte scale — derive cheap byte view from normalized bands.
+        analyser.getByteFrequencyData(rawFreq as Uint8Array<ArrayBuffer>);
+      } else {
+        analyser.getByteFrequencyData(rawFreq as Uint8Array<ArrayBuffer>);
+        computeLogBands(rawFreq, mapping, computed);
+      }
       smoothBands(smoothed, computed, 0.45, 0.08, smoothed);
       bandsRef.current.set(smoothed);
 
@@ -86,7 +98,7 @@ export function useAudioAnalyzer(
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [engine, running]);
+  }, [engine, running, mode]);
 
   return { bandsRef, waveRef, levelsRef, stats, numBands: NUM_BANDS };
 }

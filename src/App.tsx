@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AudioEngine, type SourceKind } from './audio/AudioEngine';
-import { useAudioAnalyzer } from './hooks/useAudioAnalyzer';
+import { deletePreset, loadPresets, savePreset, type Preset } from './audio/presets';
+import { useAudioAnalyzer, type AnalyzerMode } from './hooks/useAudioAnalyzer';
+import { useRecorder } from './hooks/useRecorder';
 import { Controls } from './components/Controls';
 import { Bars } from './visuals/Bars';
 import { Waveform } from './visuals/Waveform';
@@ -9,6 +11,7 @@ import './App.css';
 
 export default function App() {
   const engineRef = useRef<AudioEngine | null>(null);
+  const barsCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [engine, setEngine] = useState<AudioEngine | null>(null);
   const [started, setStarted] = useState(false);
   const [running] = useState(true);
@@ -16,9 +19,13 @@ export default function App() {
   const [fftSize, setFftSize] = useState(2048);
   const [smoothing, setSmoothing] = useState(0.8);
   const [gain, setGain] = useState(1);
+  const [filterType, setFilterType] = useState<BiquadFilterType>('lowpass');
   const [filterFreq, setFilterFreq] = useState(20000);
+  const [filterQ, setFilterQ] = useState(0.7);
   const [oscFreq, setOscFreq] = useState(110);
   const [beatThreshold, setBeatThreshold] = useState(12);
+  const [mode, setMode] = useState<AnalyzerMode>('byte');
+  const [presets, setPresets] = useState<Preset[]>(() => loadPresets());
   const [micError, setMicError] = useState<string | null>(null);
 
   const getEngine = (): AudioEngine => {
@@ -34,7 +41,9 @@ export default function App() {
     engine,
     started && running,
     beatThreshold,
+    mode,
   );
+  const rec = useRecorder(barsCanvasRef);
 
   useEffect(() => {
     return () => engineRef.current?.dispose();
@@ -46,7 +55,9 @@ export default function App() {
     eng.setFftSize(fftSize);
     eng.setSmoothing(smoothing);
     eng.setGain(gain);
+    eng.setFilterType(filterType);
     eng.setFilterFreq(filterFreq);
+    eng.setFilterQ(filterQ);
     setStarted(true);
   };
 
@@ -72,11 +83,28 @@ export default function App() {
     }
   };
 
+  const applyPreset = (pr: Preset) => {
+    setFftSize(pr.fftSize);
+    setSmoothing(pr.smoothing);
+    setGain(pr.gain);
+    setFilterType(pr.filterType);
+    setFilterFreq(pr.filterFreq);
+    setFilterQ(pr.filterQ);
+    setBeatThreshold(pr.beatThreshold);
+    const eng = getEngine();
+    eng.setFftSize(pr.fftSize);
+    eng.setSmoothing(pr.smoothing);
+    eng.setGain(pr.gain);
+    eng.setFilterType(pr.filterType);
+    eng.setFilterFreq(pr.filterFreq);
+    eng.setFilterQ(pr.filterQ);
+  };
+
   return (
     <div className="app">
       <header>
         <h1>FFT Studio</h1>
-        <p>Web Audio FFT → log bands → smoothed visuals. Small phase: Bars + Wave + Radial.</p>
+        <p>Web Audio FFT → log bands → smoothed visuals. DSP playground: filter, dB, presets, record.</p>
       </header>
 
       {!started ? (
@@ -96,9 +124,13 @@ export default function App() {
             fftSize={fftSize}
             smoothing={smoothing}
             gain={gain}
+            filterType={filterType}
             filterFreq={filterFreq}
+            filterQ={filterQ}
             oscFreq={oscFreq}
             beatThreshold={beatThreshold}
+            mode={mode}
+            presets={presets}
             micError={micError}
             onSource={(s, f) => void handleSource(s, f)}
             onFftSize={(n) => {
@@ -113,15 +145,33 @@ export default function App() {
               setGain(n);
               getEngine().setGain(n);
             }}
+            onFilterType={(t) => {
+              setFilterType(t);
+              getEngine().setFilterType(t);
+            }}
             onFilterFreq={(n) => {
               setFilterFreq(n);
               getEngine().setFilterFreq(n);
+            }}
+            onFilterQ={(n) => {
+              setFilterQ(n);
+              getEngine().setFilterQ(n);
             }}
             onOscFreq={(n) => {
               setOscFreq(n);
               getEngine().setOscFreq(n);
             }}
             onBeatThreshold={setBeatThreshold}
+            onMode={setMode}
+            onSavePreset={(name) => {
+              const next = savePreset({ name, fftSize, smoothing, gain, filterType, filterFreq, filterQ, beatThreshold });
+              setPresets(next);
+            }}
+            onLoadPreset={(name) => {
+              const pr = presets.find((x) => x.name === name);
+              if (pr) applyPreset(pr);
+            }}
+            onDeletePreset={(name) => setPresets(deletePreset(name))}
           />
 
           <div className="stats">
@@ -131,12 +181,30 @@ export default function App() {
             <div>Beat <b>{stats.beat}</b></div>
             <div>FPS <b>{stats.fps}</b></div>
             <div>Src <b>{source}</b></div>
+            <div>Mode <b>{mode}</b></div>
+          </div>
+
+          <div className="controls">
+            <div className="row">
+              <span className="label">Record bars</span>
+              {!rec.recording ? (
+                <button onClick={rec.start}>● Rec</button>
+              ) : (
+                <button onClick={rec.stop}>■ Stop</button>
+              )}
+              {rec.blobUrl && (
+                <a href={rec.blobUrl} download="fft-bars.webm">
+                  Download webm
+                </a>
+              )}
+            </div>
+            {rec.error && <div className="error">{rec.error}</div>}
           </div>
 
           <main className="viz-grid">
             <section>
               <h2>Log bars (32)</h2>
-              <Bars bandsRef={bandsRef} numBands={numBands} running={started} />
+              <Bars bandsRef={bandsRef} numBands={numBands} running={started} canvasRef={barsCanvasRef} />
             </section>
             <section>
               <h2>Radial + beat</h2>

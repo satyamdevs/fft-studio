@@ -166,3 +166,15 @@ button.active, .file-btn.active {
 @media (max-width: 760px) {
   .viz-grid { grid-template-columns: 1fr; }
 }
+
+.controls input:not([type="range"]):not([type="file"]),
+.controls select {
+  background: #0a0f22;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.controls a { color: var(--accent); font-size: 13px; }

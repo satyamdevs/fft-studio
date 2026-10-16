@@ -4,17 +4,19 @@ interface Props {
   bandsRef: RefObject<Float32Array>;
   numBands: number;
   running: boolean;
+  canvasRef?: RefObject<HTMLCanvasElement | null>;
 }
 
-export function Bars({ bandsRef, numBands, running }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+export function Bars({ bandsRef, numBands, running, canvasRef }: Props) {
+  const innerRef = useRef<HTMLCanvasElement>(null);
+  const ref = canvasRef ?? innerRef;
 
   useEffect(() => {
     if (!running) return;
     let raf = 0;
     const draw = () => {
       raf = requestAnimationFrame(draw);
-      const canvas = canvasRef.current;
+      const canvas = ref.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
@@ -48,7 +50,7 @@ export function Bars({ bandsRef, numBands, running }: Props) {
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [bandsRef, numBands, running]);
+  }, [bandsRef, numBands, running, ref]);
 
-  return <canvas ref={canvasRef} className="viz-canvas" aria-label="Log frequency bars" />;
+  return <canvas ref={ref} className="viz-canvas" aria-label="Log frequency bars" />;
 }
