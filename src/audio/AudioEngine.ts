@@ -73,6 +73,22 @@ export class AudioEngine {
     if (this.ctx && this.filter) this.filter.frequency.setTargetAtTime(hz, this.ctx.currentTime, 0.02);
   }
 
+  get filterType(): BiquadFilterType {
+    return this.filter?.type ?? 'lowpass';
+  }
+
+  setFilterType(t: BiquadFilterType): void {
+    if (this.filter) this.filter.type = t;
+  }
+
+  setFilterQ(q: number): void {
+    if (this.ctx && this.filter) this.filter.Q.setTargetAtTime(q, this.ctx.currentTime, 0.02);
+  }
+
+  getFloatFreq(target: Float32Array): void {
+    this.analyser?.getFloatFrequencyData(target as Float32Array<ArrayBuffer>);
+  }
+
   private stopCurrentSource(): void {
     try {
       this.bufferSource?.stop();
